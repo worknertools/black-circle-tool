@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Type play</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>散点风格图像生成器 - 高级色彩 & 高清印刷</title>
+    <style>
+        /* 背景色 --bg 设置为 50% 灰色 (#808080) */
+        :root { --primary: #4646ff; --bg: #808080; --panel: #ffffff; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); display: flex; flex-direction: column; height: 100vh; color: #222; }
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 360px; background: var(--panel); padding: 25px; overflow-y: auto; border-right: 1px solid #e1e4e8; display: flex; flex-direction: column; gap: 18px; }
+
+        /* 预览区动态 padding 通过 JS 控制 */
+        .preview { flex: 1; display: flex; justify-content: center; align-items: center; background: transparent; position: relative; }
+        canvas { background: #ffffff; display: block; max-width: 100%; max-height: 100%; }
+        
+        .original-preview-box { background: #000000; border: none; height: 160px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
+        .original-preview-box span { color: #ffffff; font-size: 13px; }
+        .original-preview-box img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+
+        .control-group { background: #f8f9fa; padding: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 6px; }
+        .control-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+        
+        .val { color: #000; font-family: monospace; font-size: 14px; font-weight: bold; }
+        
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; background: #dcdfe6; outline: none; margin-top: 6px; border-radius: 0; transition: background 0.1s; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: #111; cursor: pointer; border-radius: 50%; border: none; }
+        
+        .colors { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 10px; }
+        .color-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+        .color-item label { font-size: 12px; font-weight: bold; color: #444; }
+        
+        .color-input-row { display: flex; width: 100%; align-items: stretch; height: 30px; }
+        .color-input-row input[type="color"] { width: 36px; flex: none; height: 100%; margin: 0; padding: 0; border: 1px solid #ccc; border-right: none; border-radius: 0; cursor: pointer; background: #fff; box-sizing: border-box; }
+        .color-input-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-input-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 0; }
+        .color-input-row input[type="color"]::-moz-color-swatch { border: none; border-radius: 0; }
+        
+        .color-input-row input[type="text"] { flex: 1; width: 0; height: 100%; margin: 0; border: 1px solid #ccc; border-radius: 0; padding: 0; font-size: 12px; font-family: sans-serif; font-weight: 300; color: #222; text-align: center; outline: none; text-transform: uppercase; background: #fff; box-sizing: border-box; }
+        
+        .btn { background: #111; color: white; border: none; padding: 12px; font-size: 14px; font-weight: normal; cursor: pointer; transition: 0.2s; text-align: center; border-radius: 0; }
+        .btn:hover { background: #333; }
+        /* 激活状态的按钮样式修改为 50% 灰色 (#808080) */
+        .btn.active { background: #808080; }
+        .btn.active:hover { background: #737373; }
+
+        .btn-clear { background: transparent; border: none; color: #666; font-size: 13px; padding: 0; cursor: pointer; transition: 0.2s; }
+        .btn-clear:hover { color: #111; text-decoration: none; } 
+        
+        input[type="file"] { display: none; }
+        .download-row { display: flex; gap: 8px; margin-top: 5px; }
+        .download-row .btn { flex: 1; padding: 10px 0; }
+        
+        .footer-text { margin-top: auto; font-size: 12px; color: #999; text-align: center; padding-top: 10px; font-weight: 300; }
+    </style>
+</head>
+<body>
+<div class="main">
+    <div class="sidebar">
+        <div class="original-preview-box" id="previewBox">
+            <span id="origPreviewHint">Image Preview</span>
+            <img id="origImagePreview" src="" alt="原图预览">
+        </div>
+
+        <button class="btn" onclick="document.getElementById('imageUpload').click()">上传图片 / Upload Image</button>
+        <input type="file" id="imageUpload" accept="image/*">
+
+        <!-- 画布尺寸切换模式，默认激活状态在满屏画布 -->
+        <div class="control-group">
+            <div class="control-header"><label>画布尺寸 (Canvas Size)</label></div>
+            <div class="download-row">
+                <button class="btn" id="btn-3-4" onclick="setCanvasMode('3:4')">3:4 比例</button>
+                <button class="btn active" id="btn-full" onclick="setCanvasMode('full')">满屏画布</button>
+            </div>
+        </div>
+
+        <!-- 滑块控制区域：互换亮度阈值与图形缩放的位置 -->
+        <div class="control-group">
+            <div class="control-header"><label>亮度阈值 (控制留白)</label><span class="val" id="thresholdVal">230</span></div>
+            <input type="range" id="threshold" min="0" max="255" value="230">
+            
+            <div class="control-header" style="margin-top: 15px;"><label>点的大小 (Radius)</label><span class="val" id="dotSizeVal">3</span></div>
+            <input type="range" id="dotSize" min="1" max="15" value="3">
+            
+            <div class="control-header" style="margin-top: 15px;"><label>扫描步长 (越小越密)</label><span class="val" id="densityVal">5</span></div>
+            <input type="range" id="density" min="2" max="25" value="5">
+            
+            <div class="control-header" style="margin-top: 15px;"><label>图形缩放 (Scale)</label><span class="val" id="imageScaleVal">100%</span></div>
+            <input type="range" id="imageScale" min="10" max="300" value="100">
+        </div>
+        
+        <div class="control-group">
+            <div class="control-header">
+                <label>颜色设置 (Color)</label>
+            </div>
+            <div class="colors">
+                <div class="color-item">
+                    <label>散点</label>
+                    <div class="color-input-row">
+                        <input type="color" id="colorDot" value="#000000">
+                        <input type="text" id="colorDotText" value="#000000" maxlength="7">
+                    </div>
+                </div>
+                <div class="color-item">
+                    <label>底色</label>
+                    <div class="color-input-row">
+                        <input type="color" id="colorBg" value="#f9f6f0">
+                        <input type="text" id="colorBgText" value="#F9F6F0" maxlength="7">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-header" style="align-items: center;">
+                <label>高清打印级导出 Export</label>
+                <button class="btn-clear" onclick="clearCanvas()">Clear</button>
+            </div>
+            <div class="download-row">
+                <button class="btn" onclick="downloadImage('jpg')">JPG</button>
+                <button class="btn" onclick="downloadImage('png')">PNG</button>
+                <button class="btn" onclick="downloadImage('svg')">SVG</button>
+            </div>
+            <!-- 修改了按钮文字显示 -->
+            <button class="btn" style="margin-top: 8px;" onclick="randomColors()">随机图形色彩</button>
+        </div>
+
+        <div class="footer-text">2026 ©Design by Type Play Studio</div>
+    </div>
+
+    <div class="preview">
+        <canvas id="canvas"></canvas>
+    </div>
+</div>
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let originalImage = new Image();
+    
+    // 当前画布模式与存放当前计算好点坐标的缓存数组
+    let canvasMode = 'full'; 
+    let currentDots = [];
+
+    const params = {
+        imageScale: document.getElementById('imageScale'), 
+        dotSize: document.getElementById('dotSize'),
+        density: document.getElementById('density'),
+        threshold: document.getElementById('threshold'),
+        colorBg: document.getElementById('colorBg'),
+        colorDot: document.getElementById('colorDot')
+    };
+
+    function setCanvasMode(mode) {
+        canvasMode = mode;
+        document.getElementById('btn-3-4').classList.toggle('active', mode === '3:4');
+        document.getElementById('btn-full').classList.toggle('active', mode === 'full');
+        updateCanvasSize();
+    }
+
+    function updateCanvasSize() {
+        const preview = document.querySelector('.preview');
+        if (!preview.clientWidth || !preview.clientHeight) return;
+        
+        if (canvasMode === '3:4') {
+            preview.style.padding = '30px';
+            canvas.style.width = 'auto';
+            canvas.style.height = 'auto';
+            canvas.width = 600;
+            canvas.height = 800;
+        } else {
+            preview.style.padding = '0';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.width = preview.clientWidth;
+            canvas.height = preview.clientHeight;
+        }
+        
+        if (originalImage.src) {
+            currentDots = calculateDots(canvas.width, canvas.height, false);
+            renderPreview();
+        } else {
+            ctx.fillStyle = params.colorBg.value || '#f9f6f0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    updateCanvasSize();
+    window.addEventListener('resize', () => {
+        if (canvasMode === 'full') updateCanvasSize();
+    });
+
+    // 提取智能主题色彩设置给预览框背景
+    function getSubjectColor(imgElement) {
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        const size = 64; 
+        tempCanvas.width = size;
+        tempCanvas.height = size;
+        tempCtx.drawImage(imgElement, 0, 0, size, size);
+        
+        const data = tempCtx.getImageData(0, 0, size, size).data;
+        const colorCounts = {};
+        const edgeCounts = {};
+        let maxEdgeCount = 0;
+        let bgKey = '';
+
+        const quantize = (c) => Math.round(c / 16) * 16;
+        const getKey = (r, g, b) => `${quantize(r)},${quantize(g)},${quantize(b)}`;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (x === 0 || x === size - 1 || y === 0 || y === size - 1) {
+                    const i = (y * size + x) * 4;
+                    if (data[i + 3] < 128) continue; 
+                    const key = getKey(data[i], data[i+1], data[i+2]);
+                    edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+                    if (edgeCounts[key] > maxEdgeCount) { maxEdgeCount = edgeCounts[key]; bgKey = key; }
+                }
+            }
+        }
+
+        const colorDist = (k1, r, g, b) => {
+            if (!k1) return 999;
+            const p1 = k1.split(',').map(Number);
+            return Math.abs(p1[0]-r) + Math.abs(p1[1]-g) + Math.abs(p1[2]-b);
+        };
+
+        let maxSubjectCount = 0;
+        let subjectColor = '';
+        let fallbackMaxCount = 0;
+        let fallbackColor = '#000000';
+
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 128) continue;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const key = getKey(r, g, b);
+
+            colorCounts[key] = (colorCounts[key] || 0) + 1;
+            if (colorCounts[key] > fallbackMaxCount) {
+                fallbackMaxCount = colorCounts[key];
+                fallbackColor = `rgb(${quantize(r)}, ${quantize(g)}, ${quantize(b)})`;
+            }
+
+            if (bgKey && colorDist(bgKey, r, g, b) < 60) continue;
+
+            if (colorCounts[key] > maxSubjectCount) {
+                maxSubjectCount = colorCounts[key];
+                subjectColor = `rgb(${quantize(r)}, ${quantize(g)}, ${quantize(b)})`;
+            }
+        }
+        return subjectColor || fallbackColor || '#000000';
+    }
+
+    function updateSliderTrack(el) {
+        const min = parseFloat(el.min) || 0;
+        const max = parseFloat(el.max) || 100;
+        const val = parseFloat(el.value);
+        const percent = ((val - min) / (max - min)) * 100;
+        el.style.background = `linear-gradient(to right, #111 ${percent}%, #dcdfe6 ${percent}%)`;
+    }
+
+    // 将事件绑定彻底分离：会影响【散点坐标排布及数量密度】的控件触发重计算+重绘
+    ['density', 'threshold'].forEach(key => {
+        const el = params[key];
+        updateSliderTrack(el); 
+        
+        el.addEventListener('input', (e) => {
+            document.getElementById(key + 'Val').innerText = e.target.value;
+            updateSliderTrack(e.target); 
+            
+            if(originalImage.src) {
+                clearTimeout(window.calcTimeout);
+                window.calcTimeout = setTimeout(() => {
+                    currentDots = calculateDots(canvas.width, canvas.height, false);
+                    renderPreview();
+                }, 30);
+            }
+        });
+    });
+
+    // 仅会影响【渲染缩放和视觉大小】的控件直接触发轻量级重绘，图形效果保持完美，实现极致流畅
+    ['imageScale', 'dotSize'].forEach(key => {
+        const el = params[key];
+        updateSliderTrack(el); 
+        
+        el.addEventListener('input', (e) => {
+            let displayVal = e.target.value;
+            if (key === 'imageScale') displayVal += '%';
+            
+            document.getElementById(key + 'Val').innerText = displayVal;
+            updateSliderTrack(e.target); 
+            
+            if(originalImage.src) {
+                // 完全剥离运算层，直接走帧动画重绘
+                requestAnimationFrame(renderPreview);
+            }
+        });
+    });
+
+    // 仅会影响色彩的控件只会触发【重绘，坐标不打散，图形效果不变】
+    ['colorDot', 'colorBg'].forEach(key => {
+        params[key].addEventListener('input', () => {
+            if(originalImage.src) {
+                requestAnimationFrame(renderPreview);
+            } else {
+                ctx.fillStyle = params.colorBg.value || '#f9f6f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+    });
+
+    function setupColorSync(id) {
+        const colorInput = document.getElementById(id);
+        const textInput = document.getElementById(id + 'Text');
+        colorInput.addEventListener('input', (e) => { textInput.value = e.target.value.toUpperCase(); });
+        textInput.addEventListener('input', (e) => {
+            let val = e.target.value.trim();
+            if (/^#?[0-9A-Fa-f]{6}$/.test(val)) {
+                if (!val.startsWith('#')) val = '#' + val;
+                colorInput.value = val;
+                colorInput.dispatchEvent(new Event('input')); 
+            }
+        });
+        textInput.addEventListener('blur', (e) => {
+            let val = e.target.value.trim();
+            if (!val.startsWith('#')) val = '#' + val;
+            if (!/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                textInput.value = colorInput.value.toUpperCase(); 
+            } else {
+                textInput.value = val.toUpperCase();
+            }
+        });
+    }
+
+    setupColorSync('colorDot');
+    setupColorSync('colorBg');
+
+    document.getElementById('imageUpload').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            originalImage.onload = () => {
+                document.getElementById('origPreviewHint').style.display = 'none';
+                const previewImg = document.getElementById('origImagePreview');
+                previewImg.src = event.target.result;
+                previewImg.style.display = 'block';
+                document.getElementById('previewBox').style.background = getSubjectColor(originalImage);
+
+                updateCanvasSize(); // 上传后更新重置计算坐标
+            };
+            originalImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function clearCanvas() {
+        originalImage.removeAttribute('src');
+        document.getElementById('imageUpload').value = '';
+        document.getElementById('origPreviewHint').style.display = 'block';
+        document.getElementById('previewBox').style.background = '#000000';
+        const previewImg = document.getElementById('origImagePreview');
+        previewImg.removeAttribute('src');
+        previewImg.style.display = 'none';
+        
+        // 重置缩放滑块到默认100%
+        params.imageScale.value = 100;
+        document.getElementById('imageScaleVal').innerText = '100%';
+        updateSliderTrack(params.imageScale);
+        
+        currentDots = [];
+        updateCanvasSize();
+        clearTimeout(window.calcTimeout);
+    }
+    
+    // 扩展为更丰富的多主题色彩库，提供上百种精选色彩，涵盖复古、赛博朋克、马卡龙、高饱和波普等多种风格
+    function randomColors() {
+        const richColors = [
+            // 深邃蓝/青色系
+            "#1F4E5B", "#245B63", "#2D666F", "#1B3B47", "#315B6E", "#35626F", "#1C4651", "#4A6984", "#264D59", "#3E5C6B", "#0A2463", "#003F91", "#1E91D6", "#005C69",
+            // 浓郁绿色系
+            "#2C4C3B", "#405E43", "#4F6E50", "#364A31", "#415C49", "#34462D", "#57724C", "#6B7A54", "#3B4A34", "#465941", "#028090", "#00A896", "#02C39A", "#143601",
+            // 醇厚红/陶土色系
+            "#8B3A3F", "#9C4751", "#B05B5A", "#A64F4F", "#853636", "#7A3235", "#96454F", "#AD5E6A", "#752F33", "#964B49", "#C1121F", "#780000", "#D62828", "#A4161A",
+            // 浓郁芥末黄/大地色系
+            "#B8860B", "#C69214", "#A67C00", "#996515", "#8B6508", "#7C5808", "#B28727", "#9E7B26", "#9C771C", "#876418", "#F77F00", "#FCBF49", "#EAE2B7", "#D4A373",
+            // 质感深咖/暖木色系
+            "#5C5248", "#6B6054", "#7F7366", "#61554A", "#6B5D51", "#4A4138", "#7A6F62", "#8A7D6F", "#45403C", "#5E5750", "#7F5539", "#9C6644", "#B08968", "#606C38",
+            // 赛博朋克/霓虹高亮色系
+            "#FF007F", "#FF00FF", "#00F0FF", "#39FF14", "#FFEA00", "#8A2BE2", "#00FF66", "#FF3366", "#00FFFF", "#CCFF00", "#FF4500", "#9400D3", "#7DF9FF", "#FF1493",
+            // 马卡龙/柔和粉彩色系
+            "#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF", "#F4CBFF", "#D7BDE2", "#A9CCE3", "#A3E4D7", "#F9E79F", "#F5CBA7", "#FADBD8", "#D2B4DE", "#A2D9CE",
+            // 高对比波普艺术色系
+            "#FF3366", "#20A4F3", "#F26419", "#F6F5AE", "#33658A", "#F6AE2D", "#86BBD8", "#2F4858", "#F2D024", "#FF5714", "#38618C", "#35A7FF", "#FF5964", "#35FF69",
+            // 优雅紫/罗兰色系
+            "#4A235A", "#5B2C6F", "#6C3483", "#7D3C98", "#8E44AD", "#A569BD", "#BB8FCE", "#D2B4DE", "#E8DAEF", "#512E5F", "#154360", "#2471A3", "#2980B9", "#5D6D7E",
+            // 现代黑白灰与高级极简冷调色
+            "#111111", "#333333", "#555555", "#777777", "#999999", "#2B2B2B", "#3C3C3C", "#4F4F4F", "#8B9DC3", "#DFE3EE", "#3B5998", "#8B8C89", "#2C3E50", "#95A5A6"
+        ];
+        const newColor = richColors[Math.floor(Math.random() * richColors.length)];
+
+        params.colorDot.value = newColor;
+        params.colorDot.dispatchEvent(new Event('input'));
+    }
+
+    // 核心计算函数：不再处理缩放与半径大小，只负责【纯正的坐标和图形基准提取】
+    function calculateDots(targetW, targetH, isExport = false) {
+        if (!originalImage.src) return [];
+        
+        const offCanvasLocal = document.createElement('canvas');
+        offCanvasLocal.width = targetW;
+        offCanvasLocal.height = targetH;
+        const octx = offCanvasLocal.getContext('2d', { willReadFrequently: true });
+        
+        octx.fillStyle = '#ffffff'; 
+        octx.fillRect(0, 0, targetW, targetH);
+        
+        // 移除了 Scale 滑块在运算层的影响，始终以满屏比例计算基准排布，从而保护图形结构不被扭曲
+        const imgScale = Math.min(targetW / originalImage.width, targetH / originalImage.height);
+        const drawW = originalImage.width * imgScale;
+        const drawH = originalImage.height * imgScale;
+        const drawX = (targetW - drawW) / 2;
+        const drawY = (targetH - drawH) / 2;
+        
+        octx.drawImage(originalImage, drawX, drawY, drawW, drawH);
+        const data = octx.getImageData(0, 0, targetW, targetH).data;
+
+        const step = Math.max(1, parseInt(params.density.value));
+        const threshold = parseInt(params.threshold.value);
+
+        let dots = [];
+        for (let y = 0; y < targetH; y += step) {
+            for (let x = 0; x < targetW; x += step) {
+                const index = (Math.floor(y) * targetW + Math.floor(x)) * 4;
+                const r = data[index];
+                const g = data[index + 1];
+                const b = data[index + 2];
+                
+                const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+
+                if (brightness > threshold) continue;
+
+                const probability = (255 - brightness) / 255;
+                if (Math.random() < probability) {
+                    const randomOffsetX = (Math.random() - 0.5) * step;
+                    const randomOffsetY = (Math.random() - 0.5) * step;
+                    // 不再保存半径r，将其全部移交到实时的快速重绘阶段
+                    dots.push({ x: x + randomOffsetX, y: y + randomOffsetY });
+                }
+            }
+        }
+        return dots;
+    }
+
+    // 轻量级重绘：纯坐标转换渲染，极大提高大小和缩放的拖动流畅度
+    function renderPreview() {
+        if (!originalImage.src) return;
+
+        // 画背景色
+        ctx.fillStyle = params.colorBg.value;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 抓取实时的 缩放倍率 与 半径大小
+        const scaleMultiplier = parseInt(params.imageScale.value) / 100;
+        const dotSize = parseFloat(params.dotSize.value);
+        
+        // 基于画布中心点做矩阵等效缩放变换
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        // 使用一个路径极速渲染出全画布的圆点
+        ctx.fillStyle = params.colorDot.value;
+        ctx.beginPath();
+        for (let d of currentDots) {
+            const sx = cx + (d.x - cx) * scaleMultiplier;
+            const sy = cy + (d.y - cy) * scaleMultiplier;
+            ctx.moveTo(sx + dotSize, sy);
+            ctx.arc(sx, sy, dotSize, 0, Math.PI * 2);
+        }
+        ctx.fill();
+    }
+
+    // 导出的 A3 级别高质量处理管线 - 保证 100% 视觉所见即所得
+    function downloadImage(format) {
+        if(!originalImage.src || currentDots.length === 0) return alert('请先上传图片');
+        
+        const timestamp = Date.now();
+        // 4096像素尺寸，可完全满足 300dpi A3及以上的印刷高精标准
+        const MAX_DIM = 4096; 
+        
+        const maxCanvasDim = Math.max(canvas.width, canvas.height);
+        let scale = 1;
+        if (maxCanvasDim > 0) {
+            scale = MAX_DIM / maxCanvasDim;
+        }
+        
+        // 基于当前预览画布尺寸与高清缩放比，计算导出画布宽高
+        const expW = Math.round(canvas.width * scale);
+        const expH = Math.round(canvas.height * scale);
+        
+        // 抓取缩放与大小滑块，通过计算获得最终映射在高清画布里的物理参数
+        const scaleMultiplier = parseInt(params.imageScale.value) / 100;
+        const exportDotSize = parseFloat(params.dotSize.value) * scale;
+        
+        // 预览界面的物理中心点（基准点）
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        
+        // 坐标放大映射函数：先进行原视角的等比缩放计算，然后整体放大到高精度画布
+        const getExportCoords = (d) => {
+            const px = cx + (d.x - cx) * scaleMultiplier;
+            const py = cy + (d.y - cy) * scaleMultiplier;
+            return {
+                x: px * scale,
+                y: py * scale
+            };
+        };
+        
+        if (format === 'svg') {
+            // SVG 无背景构建导出
+            let svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${expW} ${expH}">`;
+            const fill = params.colorDot.value;
+            // 核心改变：完全抛弃二次计算带来的随机误差，直接映射 currentDots
+            for (let d of currentDots) {
+                const coords = getExportCoords(d);
+                svgStr += `<circle cx="${coords.x.toFixed(2)}" cy="${coords.y.toFixed(2)}" r="${exportDotSize.toFixed(2)}" fill="${fill}" />`;
+            }
+            svgStr += `</svg>`;
+            
+            const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.download = `stippling_art_${timestamp}.svg`;
+            a.href = url;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            return;
+        }
+
+        // 高精 JPG 和 PNG 的导出流程 (通过 Blob 防崩溃处理保障多设备端完美输出)
+        const expCanvas = document.createElement('canvas');
+        expCanvas.width = expW;
+        expCanvas.height = expH;
+        const ectx = expCanvas.getContext('2d');
+        
+        ectx.fillStyle = params.colorBg.value;
+        ectx.fillRect(0, 0, expW, expH);
+        
+        ectx.fillStyle = params.colorDot.value;
+        ectx.beginPath();
+        // 核心改变：完全抛弃二次计算带来的随机误差，直接映射 currentDots
+        for (let d of currentDots) {
+            const coords = getExportCoords(d);
+            ectx.moveTo(coords.x + exportDotSize, coords.y);
+            ectx.arc(coords.x, coords.y, exportDotSize, 0, Math.PI * 2);
+        }
+        ectx.fill();
+        
+        const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+        const ext = format === 'jpg' ? 'jpg' : 'png';
+        
+        expCanvas.toBlob((blob) => {
+            if(!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.download = `stippling_art_${timestamp}.${ext}`;
+            a.href = url;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        }, mime, 1.0);
+    }
+</script>
+</body>
+</html>
+    
+  </body>
+  
+</html>
